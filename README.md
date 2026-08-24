@@ -5,23 +5,23 @@ Pretty-print [TAP](https://testanything.org) (v13) as spec output or JSON.
 ## Install
 
 ```bash
-bun add tapfmt
+bun add tapcolorize-formatter
 ```
 
 CLI:
 
 ```bash
-bun add -g tapfmt
+bun add -g tapcolorize-formatter
 ```
 
-or `bunx tapfmt`.
+or `bunx tap-colorize`.
 
 ## Example
 
 This repo uses [brittle](https://github.com/holepunchto/brittle) as the TAP producer and formats it with `tapfmt`:
 
 ```bash
-bun examples/demo.js | bunx tapfmt
+bun examples/demo.js | bunx tap-colorize
 ```
 
 Same thing via scripts:
@@ -34,7 +34,7 @@ bun run test:fmt
 `examples/demo.js` covers pass, fail, skip, and todo. A saved TAP stream works the same:
 
 ```bash
-cat test/fixtures/example.txt | bunx tapfmt
+cat test/fixtures/example.txt | bunx tap-colorize
 ```
 
 ![spec output](./docs/example.png)
@@ -45,13 +45,13 @@ cat test/fixtures/example.txt | bunx tapfmt
 - `json`
 
 ```bash
-cat results.tap | tapfmt -f json
+cat results.tap | tap-colorize -f json
 ```
 
 ## Library
 
 ```ts
-import { parse, SpecFormatter, JsonFormatter } from "tapfmt";
+import { parse, SpecFormatter, JsonFormatter } from "tapcolorize-formatter";
 
 const results = parse(`TAP version 13
 1..2
