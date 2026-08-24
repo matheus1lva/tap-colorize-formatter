@@ -1,42 +1,52 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import test from "brittle";
 
-describe("CLI integration", () => {
-  const binPath = path.resolve(__dirname, "../bin/tapfmt.js");
-  const examplePath = path.resolve(__dirname, "fixtures/example.txt");
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const cli = path.resolve(dir, "../src/cli.ts");
+const examplePath = path.resolve(dir, "fixtures/example.txt");
+const exampleTap = fs.readFileSync(examplePath, "utf-8");
 
-  it("should output help with --help", () => {
-    const out = execSync(`node "${binPath}" --help`).toString();
-    expect(out).toContain("tapfmt - Pretty-print TAP results");
-    expect(out).toContain("Options:");
+function runCli(args: string[] = [], input?: string): string {
+  return execFileSync(process.execPath, [cli, ...args], {
+    encoding: "utf8",
+    input,
+  });
+}
+
+test("CLI integration", function (t) {
+  t.test("output help with --help", function (t) {
+    const out = runCli(["--help"]);
+    t.ok(out.includes("tapfmt - Pretty-print TAP results"));
+    t.ok(out.includes("Options:"));
   });
 
-  it("should output version with --version", () => {
-    const out = execSync(`node "${binPath}" --version`).toString().trim();
-    expect(out).toBe("1.0.1");
+  t.test("output version with --version", function (t) {
+    const out = runCli(["--version"]).trim();
+    t.is(out, "1.0.1");
   });
 
-  it("should format piped input with default spec formatter", () => {
-    const out = execSync(`cat "${examplePath}" | node "${binPath}"`).toString();
-    expect(out).toContain("THIS IS A SUITE");
-    expect(out).toContain("✓ this test should pass");
-    expect(out).toContain("total:     6");
+  t.test("format piped input with default spec formatter", function (t) {
+    const out = runCli([], exampleTap);
+    t.ok(out.includes("THIS IS A SUITE"));
+    t.ok(out.includes("✓ this test should pass"));
+    t.ok(out.includes("total:     6"));
   });
 
-  it("should format piped input with -f json", () => {
-    const out = execSync(`cat "${examplePath}" | node "${binPath}" -f json`).toString();
+  t.test("format piped input with -f json", function (t) {
+    const out = runCli(["-f", "json"], exampleTap);
     const json = JSON.parse(out);
-    expect(json.version).toBe(13);
-    expect(json.summary.total).toBe(6);
-    expect(json.results).toHaveLength(6);
+    t.is(json.version, 13);
+    t.is(json.summary.total, 6);
+    t.is(json.results.length, 6);
   });
 
-  it("should warn and use spec formatter when unknown format is passed", () => {
-    const out = execSync(`cat "${examplePath}" | node "${binPath}" -f unknown`).toString();
-    expect(out).toContain("Warning: unrecognized formatter");
-    expect(out).toContain("using default formatter instead");
-    expect(out).toContain("THIS IS A SUITE");
+  t.test("warn and use spec formatter when unknown format is passed", function (t) {
+    const out = runCli(["-f", "unknown"], exampleTap);
+    t.ok(out.includes("Warning: unrecognized formatter"));
+    t.ok(out.includes("using default formatter instead"));
+    t.ok(out.includes("THIS IS A SUITE"));
   });
 });

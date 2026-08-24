@@ -1,20 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { fileURLToPath } from "node:url";
+import test from "brittle";
 import { JsonFormatter } from "../src/json.js";
 import { parse } from "../src/parser.js";
 
-describe("JSON Formatter", () => {
-  const exampleFile = path.resolve(__dirname, "fixtures/example.txt");
-  const exampleTap = fs.readFileSync(exampleFile, "utf-8");
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const exampleTap = fs.readFileSync(path.join(dir, "fixtures/example.txt"), "utf-8");
 
-  it("should match expected JSON structure on example.txt", () => {
+test("JSON Formatter", function (t) {
+  t.test("match expected JSON structure on example.txt", function (t) {
     const results = parse(exampleTap);
     const formatter = new JsonFormatter();
     const json = formatter.toJson(results);
 
-    expect(json.version).toBe(13);
-    expect(json.summary).toEqual({
+    t.is(json.version, 13);
+    t.alike(json.summary, {
       total: 6,
       passed: 3,
       failed: 1,
@@ -35,8 +36,8 @@ describe("JSON Formatter", () => {
       ],
     });
 
-    expect(json.results).toHaveLength(6);
-    expect(json.results[0]).toEqual({
+    t.is(json.results.length, 6);
+    t.alike(json.results[0], {
       suite: "THIS IS A SUITE",
       group: "test 1",
       test_number: 1,
@@ -44,7 +45,7 @@ describe("JSON Formatter", () => {
       description: "this test should pass",
     });
 
-    expect(json.results[3]).toEqual({
+    t.alike(json.results[3], {
       suite: "THIS IS A SUITE",
       group: "test 2",
       test_number: 4,
@@ -53,7 +54,7 @@ describe("JSON Formatter", () => {
       description: "a test to ignore",
     });
 
-    expect(json.results[4]).toEqual({
+    t.alike(json.results[4], {
       suite: "THIS IS A SUITE",
       group: "test 2",
       test_number: 5,
@@ -63,12 +64,12 @@ describe("JSON Formatter", () => {
     });
   });
 
-  it("should handle formatting to JSON string", () => {
+  t.test("format to JSON string", function (t) {
     const results = parse(exampleTap);
     const formatter = new JsonFormatter();
     const str = formatter.formatToString(results);
     const parsed = JSON.parse(str);
-    expect(parsed.version).toBe(13);
-    expect(parsed.summary.total).toBe(6);
+    t.is(parsed.version, 13);
+    t.is(parsed.summary.total, 6);
   });
 });
