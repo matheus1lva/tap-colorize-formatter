@@ -37,7 +37,7 @@ bun run test:fmt
 cat test/fixtures/example.txt | bunx tapfmt
 ```
 
-![spec output](./docs/example.jpg)
+![spec output](./docs/example.png)
 
 ## Formats
 

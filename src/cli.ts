@@ -9,9 +9,9 @@ function getVersion(): string {
   try {
     const pkgPath = new URL("../package.json", import.meta.url);
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-    return pkg.version ?? "1.0.1";
+    return pkg.version ?? "1.0.3";
   } catch {
-    return "1.0.1";
+    return "1.0.3";
   }
 }
 

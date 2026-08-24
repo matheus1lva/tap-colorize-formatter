@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "brittle";
-import { setColorEnabled } from "../src/colors.js";
+import { faint, red, setColorEnabled } from "../src/colors.js";
 import { parse } from "../src/parser.js";
 import { SpecFormatter } from "../src/spec.js";
 
@@ -52,6 +52,52 @@ not ok 2 second failure
     const summary = formatter.summaryToString();
 
     t.ok(summary.includes("Failed Tests: There were 2 failures"));
+  });
+
+  t.test("color error line red and source context gray", function (t) {
+    setColorEnabled(true);
+    t.teardown(() => setColorEnabled(false));
+
+    const tap = `TAP version 13
+1..1
+not ok 1 applies member discount
+  ---
+  actual: 90
+  expected: 80
+  operator: is
+  source: |
+        t.is(100 * 0.9, 80);
+    -----^
+      });
+  stack: |
+    ./examples/demo.js:13:5
+  ...
+`;
+    const results = parse(tap);
+    const formatted = new SpecFormatter().formatToString(results);
+
+    t.ok(formatted.includes(red("        t.is(100 * 0.9, 80);")));
+    t.ok(formatted.includes(red("    -----^")));
+    t.ok(formatted.includes(faint("      });")));
+    t.absent(formatted.includes(red("      });")));
+    t.absent(formatted.includes(faint("        t.is(100 * 0.9, 80);")));
+  });
+
+  t.test("hide brittle runner summary comments", function (t) {
+    setColorEnabled(false);
+    t.teardown(() => setColorEnabled(true));
+
+    const tap = `TAP version 13
+ok 1 passing
+1..1
+# tests = 1/1 pass
+# asserts = 1/1 pass
+# time = 1ms
+# ok
+`;
+    const formatted = new SpecFormatter().formatToString(parse(tap));
+    t.absent(formatted.includes("tests = 1/1 pass"));
+    t.absent(/\n\s*ok\s*\n/.test(formatted));
   });
 
   t.test("format no tests found", function (t) {

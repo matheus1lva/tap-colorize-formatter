@@ -59,6 +59,47 @@ ok 3 # todo implement feature
     t.ok(results.isPassing());
   });
 
+  t.test("attach yaml on indented assertions to that assertion", function (t) {
+    const tap = `TAP version 13
+ok 1 - JSON Formatter
+# CLI integration
+    not ok 1 - (output version) - should be equal
+      ---
+      actual: 1.0.2
+      expected: 1.0.1
+      operator: is
+      source: |
+            t.is(out, "1.0.1");
+        -----^
+      ...
+not ok 2 - CLI integration
+1..2
+`;
+    const results = parse(tap);
+    t.is(results.tests.length, 3);
+    t.ok(results.tests[1].failed);
+    t.ok(results.tests[1].yamlBytes.includes("actual: 1.0.2"));
+    t.ok(results.tests[1].yamlBytes.includes("t.is(out, \"1.0.1\");"));
+    t.absent(results.tests[0].yamlBytes.includes("actual: 1.0.2"));
+  });
+
+  t.test("ignore brittle runner summary comments", function (t) {
+    const tap = `TAP version 13
+ok 1 a
+ok 2 b
+1..2
+# tests = 2/2 pass
+# asserts = 2/2 pass
+# time = 1ms
+# ok
+`;
+    const results = parse(tap);
+    for (const test of results.tests) {
+      t.alike(test.diagnostics, []);
+    }
+    t.alike(results.explanation, []);
+  });
+
   t.test("parse YAML diagnostic blocks", function (t) {
     const tap = `TAP version 13
 1..1

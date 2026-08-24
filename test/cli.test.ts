@@ -25,7 +25,8 @@ test("CLI integration", function (t) {
 
   t.test("output version with --version", function (t) {
     const out = runCli(["--version"]).trim();
-    t.is(out, "1.0.1");
+    const pkg = JSON.parse(fs.readFileSync(path.resolve(dir, "../package.json"), "utf8"));
+    t.is(out, pkg.version);
   });
 
   t.test("format piped input with default spec formatter", function (t) {

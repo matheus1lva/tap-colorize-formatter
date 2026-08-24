@@ -2,10 +2,11 @@ import type { Results, Test } from "./types.js";
 
 const versionLine = /^TAP version (\d+)/;
 const bailOutLine = /^Bail out!\s*(\S.*)?$/;
-const testLine = /^(not )?ok\b(.*)/;
+const testLine = /^\s*(not )?ok\b(.*)/;
 const optionalTestLine = /^\s*(\d+)?\s*([^#]*?)(?:#\s*((\w*)\s*(.*)))?$/;
 const testPlanDeclaration = /^\d+\.\.(\d+)$/;
 const diagnostic = /^\s*#(.*)$/;
+const runnerComment = /^(ok|not ok)$|^(tests|asserts|time)\s*=/i;
 const yamlStart = /^\s*---$/;
 const yamlStop = /^\s*\.\.\.$/;
 
@@ -149,7 +150,7 @@ export function parse(input: string | string[]): Results {
           const diagMatch = line.match(diagnostic);
           if (diagMatch) {
             const diagnosticLine = (diagMatch[1] ?? "").trim();
-            if (diagnosticLine !== "") {
+            if (diagnosticLine !== "" && !runnerComment.test(diagnosticLine)) {
               if (currentTest !== null) {
                 currentTest.diagnostics.push(diagnosticLine);
               } else {
