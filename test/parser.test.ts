@@ -1,5 +1,5 @@
 import test from "brittle";
-import { parse, resultsToString } from "../src/parser.js";
+import { parse, Parser, resultsToString } from "../src/parser.js";
 
 test("TAP 13 Parser", function (t) {
   t.test("parse TAP version and basic passing tests", function (t) {
@@ -136,6 +136,27 @@ Bail out! Database connection failed
     t.ok(results.bailOut);
     t.is(results.bailOutReason, "Database connection failed");
     t.absent(results.isPassing());
+  });
+
+  t.test("emit each test as its line arrives, before end", function (t) {
+    const parser = new Parser();
+    const events = parser.write("TAP version 13\nok 1 first\n");
+    const tests = events.filter((e) => e.type === "test");
+    t.is(tests.length, 1);
+    t.is(tests[0].test.description, "first");
+    t.ok(tests[0].test.passed);
+
+    const more = parser.write("ok 2 second\n");
+    t.is(more.filter((e) => e.type === "test").length, 1);
+    t.is(more.find((e) => e.type === "test")?.test.description, "second");
+  });
+
+  t.test("emit yaml after the test it belongs to", function (t) {
+    const parser = new Parser();
+    parser.write("TAP version 13\nnot ok 1 fail\n");
+    const yamlEvents = parser.write("  ---\n  actual: 1\n  ...\n").filter((e) => e.type === "yaml");
+    t.is(yamlEvents.length, 1);
+    t.ok(yamlEvents[0].test.yamlBytes.includes("actual: 1"));
   });
 
   t.test("generate results string representation", function (t) {

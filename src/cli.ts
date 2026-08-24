@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { bold, brightMagenta, faint, italic, magenta } from "./colors.js";
 import { JsonFormatter } from "./json.js";
-import { parse } from "./parser.js";
+import { Parser, type ParseEvent } from "./parser.js";
 import { SpecFormatter } from "./spec.js";
 import type { Formatter } from "./types.js";
 
@@ -71,47 +71,46 @@ export async function run(args: string[] = process.argv.slice(2)): Promise<void>
       break;
   }
 
-  let receivedData = false;
-  let chunks = "";
+  if (process.stdin.isTTY) {
+    console.log("No input stream to format.");
+    console.log(faint("usage: myprocess | tapfmt [-f spec]"));
+    return;
+  }
 
-  const monitor = setTimeout(() => {
-    if (!receivedData) {
-      console.log("No input stream to format.");
-      console.log(faint("usage: myprocess | tapfmt [-f spec]"));
-      process.exit(0);
-    }
-  }, 1000);
+  const parser = new Parser();
+  const spec = formatter instanceof SpecFormatter ? formatter : null;
+  spec?.streamStart(parser.results);
 
   process.stdin.setEncoding("utf-8");
 
   process.stdin.on("data", (chunk: string) => {
-    if (!receivedData) {
-      receivedData = true;
-      clearTimeout(monitor);
-    }
-    chunks += chunk;
+    applyEvents(spec, parser.write(chunk));
   });
 
   await new Promise<void>((resolve, reject) => {
     process.stdin.on("end", () => {
-      clearTimeout(monitor);
-      if (!receivedData && chunks.length === 0) {
-        console.log("No input stream to format.");
-        console.log(faint("usage: myprocess | tapfmt [-f spec]"));
-        process.exit(0);
+      applyEvents(spec, parser.end());
+      if (spec) {
+        spec.summary();
+      } else {
+        formatter.format(parser.results);
+        formatter.summary();
       }
-
-      const results = parse(chunks);
-      formatter.format(results);
-      formatter.summary();
       resolve();
     });
 
-    process.stdin.on("error", (err) => {
-      clearTimeout(monitor);
-      reject(err);
-    });
+    process.stdin.on("error", reject);
   });
+}
+
+function applyEvents(spec: SpecFormatter | null, events: ParseEvent[]): void {
+  if (!spec) return;
+  for (const event of events) {
+    if (event.type === "comment") spec.streamComment(event.text);
+    else if (event.type === "test") spec.streamTest(event.test);
+    else if (event.type === "yaml") spec.streamYaml(event.test);
+    else spec.streamBail(event.reason);
+  }
 }
 
 // Only invoke run() if this module is being executed directly

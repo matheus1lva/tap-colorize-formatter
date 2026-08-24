@@ -14,6 +14,9 @@ import type { Formatter, Results, Test } from "./types.js";
 export class SpecFormatter implements Formatter {
   public results: Results | null = null;
   public failedTests: Test[] = [];
+  private headerWritten = false;
+  private testsWritten = 0;
+  private pendingSuite: string | null = null;
 
   public formatToString(results: Results): string {
     this.results = results;
@@ -119,6 +122,54 @@ export class SpecFormatter implements Formatter {
     return out;
   }
 
+  public streamStart(results: Results): void {
+    this.results = results;
+    this.failedTests = [];
+    this.headerWritten = false;
+    this.testsWritten = 0;
+    this.pendingSuite = null;
+  }
+
+  public streamComment(text: string): void {
+    if (this.testsWritten === 0) return;
+    if (this.pendingSuite === null) this.pendingSuite = text;
+  }
+
+  public streamTest(test: Test): void {
+    this.writeHeader();
+    if (this.pendingSuite) {
+      process.stdout.write(`\n  ${underline(this.pendingSuite)}\n\n`);
+      this.pendingSuite = null;
+    }
+
+    if (test.skipped) {
+      const icon = "\u21B7";
+      const cleanedDirective = test.directiveText.replace(/skip/gi, "").trim();
+      process.stdout.write(`    ${faint(blue(icon))} ${faint(blue("skipped"))} ${faint(blue(cleanedDirective))}\n`);
+    } else if (test.todo) {
+      const icon = "🗹";
+      const cleanedDirective = test.directiveText.replace(/todo/gi, "").trim();
+      process.stdout.write(`    ${yellow(icon)}${bold(yellow("TO DO:"))} ${yellow(cleanedDirective)}\n`);
+    } else if (test.passed) {
+      process.stdout.write(`    ${green("\u2713")} ${faint(test.description)}\n`);
+    } else {
+      this.failedTests.push(test);
+      process.stdout.write(this.formatFail(test, false, this.testsWritten > 0 ? "\n" : ""));
+    }
+
+    this.testsWritten++;
+  }
+
+  public streamYaml(test: Test): void {
+    process.stdout.write(this.formatDetail(test));
+  }
+
+  public streamBail(reason: string): void {
+    let sep = "";
+    if (reason.trim().length > 0) sep = ": ";
+    process.stdout.write(`\n  ${bold(yellow("\u26A0 Aborted"))}${yellow(sep)}${yellow(reason)}\n`);
+  }
+
   public format(results: Results): void {
     const text = this.formatToString(results);
     if (text) {
@@ -131,6 +182,26 @@ export class SpecFormatter implements Formatter {
     if (text) {
       process.stdout.write(text);
     }
+  }
+
+  private writeHeader(): void {
+    if (this.headerWritten || !this.results) return;
+    const results = this.results;
+    let out = "";
+    let suite = "";
+
+    if (results.explanation.length > 1 && suite !== results.explanation[0]) {
+      suite = results.explanation[0];
+      out += `\n  ${bold(suite)}\n\n`;
+      suite = results.explanation[results.explanation.length - 1];
+      out += `  ${underline(suite)}\n\n`;
+    } else if (results.explanation.length === 1) {
+      suite = results.explanation[0];
+      out += `\n  ${underline(suite)}\n\n`;
+    }
+
+    if (out) process.stdout.write(out);
+    this.headerWritten = true;
   }
 
   private formatFail(test: Test, info = false, prefix = ""): string {

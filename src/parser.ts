@@ -16,14 +16,27 @@ enum ParserState {
   StoreYaml = 2,
 }
 
-export function parse(input: string | string[]): Results {
-  const lines: string[] = Array.isArray(input) ? input : input.split(/\r?\n/);
+export type ParseEvent =
+  | { type: "test"; test: Test }
+  | { type: "yaml"; test: Test }
+  | { type: "comment"; text: string }
+  | { type: "bail"; reason: string };
 
-  let currentTest: Test | null = null;
-  let state = ParserState.FindVersionString;
-  let foundTestPlan = false;
-  let foundAllTests = false;
+function emptyTest(): Test {
+  return {
+    testNumber: -1,
+    passed: false,
+    failed: false,
+    skipped: false,
+    todo: false,
+    description: "",
+    directiveText: "",
+    diagnostics: [],
+    yamlBytes: "",
+  };
+}
 
+function createResults(lines: string[]): Results {
   const results: Results = {
     expectedTests: -1,
     totalTests: 0,
@@ -45,9 +58,57 @@ export function parse(input: string | string[]): Results {
       return resultsToString(this);
     },
   };
+  return results;
+}
 
-  for (const line of lines) {
-    switch (state) {
+export class Parser {
+  results: Results;
+  private state = ParserState.FindVersionString;
+  private currentTest: Test | null = null;
+  private foundTestPlan = false;
+  private foundAllTests = false;
+  private buffer = "";
+
+  constructor() {
+    this.results = createResults([]);
+  }
+
+  write(chunk: string): ParseEvent[] {
+    this.buffer += chunk;
+    const events: ParseEvent[] = [];
+    let nl = this.buffer.indexOf("\n");
+    while (nl !== -1) {
+      let line = this.buffer.slice(0, nl);
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      this.buffer = this.buffer.slice(nl + 1);
+      events.push(...this.pushLine(line));
+      nl = this.buffer.indexOf("\n");
+    }
+    return events;
+  }
+
+  end(): ParseEvent[] {
+    const events: ParseEvent[] = [];
+    if (this.buffer.length > 0) {
+      events.push(...this.pushLine(this.buffer));
+      this.buffer = "";
+    }
+    if (this.state === ParserState.StoreYaml && this.currentTest !== null && this.currentTest.yamlBytes.length > 0) {
+      events.push({ type: "yaml", test: this.currentTest });
+    }
+    if (this.currentTest !== null) {
+      this.results.tests.push(this.currentTest);
+      this.currentTest = null;
+    }
+    return events;
+  }
+
+  private pushLine(line: string): ParseEvent[] {
+    const events: ParseEvent[] = [];
+    const results = this.results;
+    results.lines.push(line);
+
+    switch (this.state) {
       case ParserState.FindVersionString: {
         const versionMatch = line.match(versionLine);
         if (versionMatch) {
@@ -55,7 +116,7 @@ export function parse(input: string | string[]): Results {
           if (!isNaN(v)) {
             results.tapVersion = v;
             results.foundTapData = true;
-            state = ParserState.StoreTestMetadata;
+            this.state = ParserState.StoreTestMetadata;
           }
         }
         break;
@@ -65,40 +126,31 @@ export function parse(input: string | string[]): Results {
         if (bailOutMatch) {
           results.bailOut = true;
           results.bailOutReason = bailOutMatch[1] ?? "";
+          events.push({ type: "bail", reason: results.bailOutReason });
           break;
         }
 
-        if (!foundTestPlan) {
+        if (!this.foundTestPlan) {
           const testPlan = line.match(testPlanDeclaration);
           if (testPlan) {
             const exp = parseInt(testPlan[1], 10);
             if (!isNaN(exp)) {
               results.expectedTests = exp;
-              foundTestPlan = true;
+              this.foundTestPlan = true;
             }
           }
         }
 
         const testLineMatch = line.match(testLine);
         if (testLineMatch) {
-          if (currentTest !== null) {
-            results.tests.push(currentTest);
+          if (this.currentTest !== null) {
+            results.tests.push(this.currentTest);
           }
 
-          currentTest = {
-            testNumber: -1,
-            passed: false,
-            failed: false,
-            skipped: false,
-            todo: false,
-            description: "",
-            directiveText: "",
-            diagnostics: [],
-            yamlBytes: "",
-          };
+          this.currentTest = emptyTest();
 
-          if (foundAllTests) {
-            continue;
+          if (this.foundAllTests) {
+            break;
           }
 
           const optionalContent = testLineMatch[2] ?? "";
@@ -108,11 +160,11 @@ export function parse(input: string | string[]): Results {
             const testNumString = optionalMatch[1];
             if (testNumString) {
               const num = parseInt(testNumString, 10);
-              currentTest.testNumber = isNaN(num) ? -1 : num;
+              this.currentTest.testNumber = isNaN(num) ? -1 : num;
             }
 
             const description = (optionalMatch[2] ?? "").trim();
-            currentTest.description = description;
+            this.currentTest.description = description;
 
             const directive = optionalMatch[4] ?? "";
             const directiveText = optionalMatch[3] ?? "";
@@ -121,41 +173,43 @@ export function parse(input: string | string[]): Results {
             results.totalTests++;
 
             if (directive !== "") {
-              currentTest.directiveText = directiveText.trim();
+              this.currentTest.directiveText = directiveText.trim();
             }
 
             const lowerDirective = directive.toLowerCase();
             if (lowerDirective === "skip") {
               results.skippedTests++;
-              currentTest.skipped = true;
+              this.currentTest.skipped = true;
             } else if (lowerDirective === "todo") {
               results.todoTests++;
-              currentTest.todo = true;
+              this.currentTest.todo = true;
             } else if (isFailed) {
               results.failedTests++;
-              currentTest.failed = true;
+              this.currentTest.failed = true;
             } else {
               results.passedTests++;
-              currentTest.passed = true;
+              this.currentTest.passed = true;
             }
 
             if (results.totalTests === results.expectedTests) {
-              foundAllTests = true;
+              this.foundAllTests = true;
             }
+
+            events.push({ type: "test", test: this.currentTest });
           }
         } else if (yamlStart.test(line)) {
-          state = ParserState.StoreYaml;
-          continue;
+          this.state = ParserState.StoreYaml;
         } else {
           const diagMatch = line.match(diagnostic);
           if (diagMatch) {
             const diagnosticLine = (diagMatch[1] ?? "").trim();
             if (diagnosticLine !== "" && !runnerComment.test(diagnosticLine)) {
-              if (currentTest !== null) {
-                currentTest.diagnostics.push(diagnosticLine);
+              if (this.currentTest !== null) {
+                this.currentTest.diagnostics.push(diagnosticLine);
               } else {
                 results.explanation.push(diagnosticLine);
               }
+              events.push({ type: "comment", text: diagnosticLine });
             }
           }
         }
@@ -163,23 +217,27 @@ export function parse(input: string | string[]): Results {
       }
       case ParserState.StoreYaml: {
         if (yamlStop.test(line)) {
-          state = ParserState.StoreTestMetadata;
-          continue;
-        } else {
-          if (currentTest !== null) {
-            currentTest.yamlBytes += line + "\n";
+          this.state = ParserState.StoreTestMetadata;
+          if (this.currentTest !== null && this.currentTest.yamlBytes.length > 0) {
+            events.push({ type: "yaml", test: this.currentTest });
           }
+        } else if (this.currentTest !== null) {
+          this.currentTest.yamlBytes += line + "\n";
         }
         break;
       }
     }
-  }
 
-  if (currentTest !== null) {
-    results.tests.push(currentTest);
+    return events;
   }
+}
 
-  return results;
+export function parse(input: string | string[]): Results {
+  const parser = new Parser();
+  const text = Array.isArray(input) ? input.join("\n") + (input.length > 0 ? "\n" : "") : input;
+  parser.write(text);
+  parser.end();
+  return parser.results;
 }
 
 export function isPassing(r: Results): boolean {

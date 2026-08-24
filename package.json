@@ -1,6 +1,6 @@
 {
   "name": "tapcolorize-formatter",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Colorize TAP results.",
   "type": "module",
   "main": "./dist/index.cjs",

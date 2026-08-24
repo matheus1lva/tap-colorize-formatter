@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,15 @@ function runCli(args: string[] = [], input?: string): string {
     encoding: "utf8",
     input,
   });
+}
+
+async function waitUntil(check: () => boolean, ms = 1000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  }
+  throw new Error("timed out waiting for streamed output");
 }
 
 test("CLI integration", function (t) {
@@ -42,6 +51,48 @@ test("CLI integration", function (t) {
     t.is(json.version, 13);
     t.is(json.summary.total, 6);
     t.is(json.results.length, 6);
+  });
+
+  t.test("stream spec output before stdin ends", async function (t) {
+    const child = spawn(process.execPath, [cli], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      out += chunk;
+    });
+
+    child.stdin.write("TAP version 13\nok 1 first\n");
+    await waitUntil(() => out.includes("first"));
+    t.ok(out.includes("first"));
+    t.absent(out.includes("total:"));
+
+    child.stdin.write("ok 2 second\n1..2\n");
+    child.stdin.end();
+    await new Promise((resolve) => child.once("close", resolve));
+    t.ok(out.includes("second"));
+    t.ok(out.includes("total:"));
+  });
+
+  t.test("wait for a slow first TAP line instead of exiting", async function (t) {
+    const child = spawn(process.execPath, [cli], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    let out = "";
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      out += chunk;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    t.absent(out.includes("No input stream to format."));
+
+    child.stdin.write("TAP version 13\nok 1 late\n1..1\n");
+    child.stdin.end();
+    await new Promise((resolve) => child.once("close", resolve));
+    t.ok(out.includes("late"));
+    t.ok(out.includes("total:"));
   });
 
   t.test("warn and use spec formatter when unknown format is passed", function (t) {
