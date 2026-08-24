@@ -1,6 +1,6 @@
 # tapfmt
 
-A standalone command line application for formatting raw [TAP](https://testanything.org) results into pretty/readable output.
+A fast, lightweight formatting tool and library for formatting raw [TAP](https://testanything.org) (Test Anything Protocol v13) results into pretty/readable output or JSON.
 
 ## Example Usage
 
@@ -31,7 +31,7 @@ ok 6 some other test
 **_Command:_**
 
 ```bash
-cat example.txt | tapfmt
+cat example.txt | npx tapfmt
 ```
 
 **_Result:_**
@@ -40,9 +40,52 @@ cat example.txt | tapfmt
 
 ## Installation
 
-Download the latest version from the [releases](https://github.com/coreybutler/tapfmt/releases) for your operating system (Windows, macOS, Linux), extract the executable, and place it in your project directory.
+### CLI (Global / npx)
 
-If you wish to use this utility globally, save the executable to a directory on your system, then add the location to your `PATH` variable.
+Run directly with `npx`:
+
+```bash
+cat example.txt | npx tapfmt
+```
+
+Or install globally:
+
+```bash
+npm install -g tapfmt
+```
+
+### Library (Node.js / TypeScript)
+
+```bash
+npm install tapfmt
+```
+
+## Programmatic API
+
+You can also use `tapfmt` directly in TypeScript or JavaScript:
+
+```ts
+import { parse, SpecFormatter, JsonFormatter, formatSpec, formatJson } from "tapfmt";
+
+const tapOutput = `TAP version 13
+1..2
+ok 1 test 1
+not ok 2 test 2
+`;
+
+// Parse TAP output
+const results = parse(tapOutput);
+
+// Format as Spec
+const spec = new SpecFormatter();
+console.log(spec.formatToString(results));
+console.log(spec.summaryToString());
+
+// Or format as JSON
+const json = new JsonFormatter();
+const jsonData = json.toJson(results);
+console.log(JSON.stringify(jsonData, null, 2));
+```
 
 ## Pretty Formats
 
@@ -50,9 +93,8 @@ There are two formatting options:
 
 - `spec` (default)
 - `json`
-- _Quality PR's for other styles/formats will be accepted._
 
-To invoke a specific format, pass the `-f` flag:
+To invoke a specific format, pass the `-f` / `--format` flag:
 
 ```sh
 cat tap_output.txt | tapfmt -f json
@@ -68,7 +110,7 @@ _Outputs:_
     "failed": 1,
     "skipped": 1,
     "todo": 1,
-    "expected": -1,
+    "expected": 6,
     "bailout": true,
     "bailout_reason": "Somethings amiss",
     "failures": [
@@ -78,7 +120,7 @@ _Outputs:_
         "test_number": 2,
         "passed": false,
         "description": "this test should fail",
-        "info": "operator: ok\n    expected: true\n    actual:   false\n    at: Test.\u003canonymous\u003e (/Users/khanh.nguyen/tap-spec/test.js:13:15)"
+        "info": "operator: ok\n    expected: true\n    actual:   false\n    at: Test.<anonymous> (/Users/khanh.nguyen/tap-spec/test.js:13:15)"
       }
     ]
   },
@@ -96,7 +138,7 @@ _Outputs:_
       "test_number": 2,
       "passed": false,
       "description": "this test should fail",
-      "info": "operator: ok\n    expected: true\n    actual:   false\n    at: Test.\u003canonymous\u003e (/Users/khanh.nguyen/tap-spec/test.js:13:15)"
+      "info": "operator: ok\n    expected: true\n    actual:   false\n    at: Test.<anonymous> (/Users/khanh.nguyen/tap-spec/test.js:13:15)"
     },
     {
       "suite": "THIS IS A SUITE",
@@ -136,7 +178,7 @@ _Outputs:_
 
 The entire point of TAP is to provide a cross-language protocol for presenting test results. Many in the open source community adopted this standard, but responded by creating runtime-specific formatters (ex: Node.js). As a result, a single cohesive model exists with a fractured landscape of formatting tools.
 
-Some runtimes/environments don't have TAP formatters at all (ex: Deno, Go), but it's still pretty easy to produce TAP results. `tapfmt` provides a single runtime-agnostic app to provide consistent formatting for any test suite producing TAP results.
+`tapfmt` provides a runtime-agnostic CLI and TypeScript/JavaScript library to provide consistent formatting for any test suite producing TAP results.
 
 For example, [tappedout](https://github.com/coreybutler/tapped-out) provides a runtime-agnostic JavaScript test suite that generates TAP results. This allows for tests to be produced using:
 
@@ -152,4 +194,8 @@ deno run --allow-all tappedout_test.js | tapfmt
 cat example.txt | tapfmt
 ```
 
-All of these would produce pretty results.
+All of these produce pretty results.
+
+## License
+
+MIT

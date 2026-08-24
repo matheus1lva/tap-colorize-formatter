@@ -1,6 +1,6 @@
-.*
-!.gitignore
-!.github
-*.exe
-*.bin
+node_modules
 dist
+coverage
+*.log
+.DS_Store
+.env*
