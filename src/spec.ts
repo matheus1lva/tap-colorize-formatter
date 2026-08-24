@@ -142,16 +142,11 @@ export class SpecFormatter implements Formatter {
   }
 
   private formatDetail(test: Test): string {
-    let out = "";
-    if (test.yamlBytes.length > 0) {
-      const chars = "-".repeat(test.description.length + 2);
-      out += `    ${faint(red(chars))}\n`;
+    if (test.yamlBytes.length === 0) return "";
 
-      const lines = test.yamlBytes.split("\n");
-      for (const line of lines) {
-        out += `  ${cyan(line)}\n`;
-      }
-    }
+    const chars = "-".repeat(Math.max(test.description.length + 2, 3));
+    let out = `    ${faint(red(chars))}\n`;
+    out += formatYaml(test.yamlBytes);
     return out;
   }
 }
@@ -161,4 +156,62 @@ export function formatSpec(results: Results): SpecFormatter {
   formatter.format(results);
   formatter.summary();
   return formatter;
+}
+
+const yamlKey = /^(\s*)([A-Za-z_][\w-]*)\s*:/;
+const caretLine = /^\s*-+\^\s*$/;
+
+function formatYaml(yaml: string): string {
+  const lines = yaml.split("\n");
+  let out = "";
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const key = yamlKey.exec(line);
+
+    if (key && (key[2] === "source" || key[2] === "stack")) {
+      const keyIndent = key[1].length;
+      const block: string[] = [];
+      i++;
+      while (i < lines.length) {
+        const next = lines[i];
+        if (next.trim() === "") {
+          i++;
+          continue;
+        }
+        const nextKey = yamlKey.exec(next);
+        if (nextKey && nextKey[1].length <= keyIndent) break;
+        block.push(next);
+        i++;
+      }
+      if (key[2] === "source") {
+        out += formatSourceBlock(block);
+      } else {
+        for (const l of block) {
+          out += `  ${faint(l)}\n`;
+        }
+      }
+      continue;
+    }
+
+    if (line.trim() !== "") {
+      out += `  ${cyan(line)}\n`;
+    }
+    i++;
+  }
+
+  return out;
+}
+
+function formatSourceBlock(lines: string[]): string {
+  const caretAt = lines.findIndex((line) => caretLine.test(line));
+  let out = "";
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === "") continue;
+    const error = caretAt >= 0 && (i === caretAt || i === caretAt - 1);
+    out += `  ${error ? red(line) : faint(line)}\n`;
+  }
+  return out;
 }

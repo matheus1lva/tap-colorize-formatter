@@ -1,42 +1,46 @@
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { setColorEnabled, stripAnsi } from "../src/colors.js";
+import { fileURLToPath } from "node:url";
+import test from "brittle";
+import { faint, red, setColorEnabled } from "../src/colors.js";
 import { parse } from "../src/parser.js";
 import { SpecFormatter } from "../src/spec.js";
 
-describe("Spec Formatter", () => {
-  const exampleFile = path.resolve(__dirname, "fixtures/example.txt");
-  const exampleTap = fs.readFileSync(exampleFile, "utf-8");
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const exampleTap = fs.readFileSync(path.join(dir, "fixtures/example.txt"), "utf-8");
 
-  it("should format TAP results to spec output string", () => {
+test("Spec Formatter", function (t) {
+  t.test("format TAP results to spec output string", function (t) {
     setColorEnabled(false);
+    t.teardown(() => setColorEnabled(true));
+
     const results = parse(exampleTap);
     const formatter = new SpecFormatter();
     const formatted = formatter.formatToString(results);
     const summary = formatter.summaryToString();
 
-    expect(formatted).toContain("THIS IS A SUITE");
-    expect(formatted).toContain("test 1");
-    expect(formatted).toContain("✓ this test should pass");
-    expect(formatted).toContain("test 2");
-    expect(formatted).toContain("⨯ this test should fail");
-    expect(formatted).toContain("operator: ok");
-    expect(formatted).toContain("↷ skipped a test to ignore");
-    expect(formatted).toContain("🗹TO DO: must do something");
-    expect(formatted).toContain("⚠ Aborted: Somethings amiss");
+    t.ok(formatted.includes("THIS IS A SUITE"));
+    t.ok(formatted.includes("test 1"));
+    t.ok(formatted.includes("✓ this test should pass"));
+    t.ok(formatted.includes("test 2"));
+    t.ok(formatted.includes("⨯ this test should fail"));
+    t.ok(formatted.includes("operator: ok"));
+    t.ok(formatted.includes("↷ skipped a test to ignore"));
+    t.ok(formatted.includes("🗹TO DO: must do something"));
+    t.ok(formatted.includes("⚠ Aborted: Somethings amiss"));
 
-    expect(summary).toContain("Failed Tests: There was 1 failure");
-    expect(summary).toContain("total:     6");
-    expect(summary).toContain("passing:   3");
-    expect(summary).toContain("failing:   1");
-    expect(summary).toContain("skipped:   1");
-    expect(summary).toContain("tasks:     1");
-    setColorEnabled(true);
+    t.ok(summary.includes("Failed Tests: There was 1 failure"));
+    t.ok(summary.includes("total:     6"));
+    t.ok(summary.includes("passing:   3"));
+    t.ok(summary.includes("failing:   1"));
+    t.ok(summary.includes("skipped:   1"));
+    t.ok(summary.includes("tasks:     1"));
   });
 
-  it("should format multiple failures with correct pluralization", () => {
+  t.test("format multiple failures with correct pluralization", function (t) {
     setColorEnabled(false);
+    t.teardown(() => setColorEnabled(true));
+
     const tap = `TAP version 13
 1..2
 not ok 1 first failure
@@ -47,12 +51,59 @@ not ok 2 second failure
     formatter.formatToString(results);
     const summary = formatter.summaryToString();
 
-    expect(summary).toContain("Failed Tests: There were 2 failures");
-    setColorEnabled(true);
+    t.ok(summary.includes("Failed Tests: There were 2 failures"));
   });
 
-  it("should format no tests found", () => {
+  t.test("color error line red and source context gray", function (t) {
+    setColorEnabled(true);
+    t.teardown(() => setColorEnabled(false));
+
+    const tap = `TAP version 13
+1..1
+not ok 1 applies member discount
+  ---
+  actual: 90
+  expected: 80
+  operator: is
+  source: |
+        t.is(100 * 0.9, 80);
+    -----^
+      });
+  stack: |
+    ./examples/demo.js:13:5
+  ...
+`;
+    const results = parse(tap);
+    const formatted = new SpecFormatter().formatToString(results);
+
+    t.ok(formatted.includes(red("        t.is(100 * 0.9, 80);")));
+    t.ok(formatted.includes(red("    -----^")));
+    t.ok(formatted.includes(faint("      });")));
+    t.absent(formatted.includes(red("      });")));
+    t.absent(formatted.includes(faint("        t.is(100 * 0.9, 80);")));
+  });
+
+  t.test("hide brittle runner summary comments", function (t) {
     setColorEnabled(false);
+    t.teardown(() => setColorEnabled(true));
+
+    const tap = `TAP version 13
+ok 1 passing
+1..1
+# tests = 1/1 pass
+# asserts = 1/1 pass
+# time = 1ms
+# ok
+`;
+    const formatted = new SpecFormatter().formatToString(parse(tap));
+    t.absent(formatted.includes("tests = 1/1 pass"));
+    t.absent(/\n\s*ok\s*\n/.test(formatted));
+  });
+
+  t.test("format no tests found", function (t) {
+    setColorEnabled(false);
+    t.teardown(() => setColorEnabled(true));
+
     const tap = `TAP version 13
 1..0
 `;
@@ -61,7 +112,6 @@ not ok 2 second failure
     formatter.formatToString(results);
     const summary = formatter.summaryToString();
 
-    expect(summary).toContain("No tests found");
-    setColorEnabled(true);
+    t.ok(summary.includes("No tests found"));
   });
 });
